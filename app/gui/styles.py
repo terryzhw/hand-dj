@@ -1,4 +1,3 @@
-from modules.constants import *
 
 BUTTON_STYLE = """
     QPushButton {
@@ -22,7 +21,7 @@ INPUT_STYLE = """
     border-radius: 6px;
 """
 
-BACKGROUND_STYLE = f"background-color: {BACKGROUND_COLOR}; color: {TEXT_COLOR};"
+BACKGROUND_STYLE = "background-color: #1e1e1e; color: white;"
 
 TITLE_FONT_SIZE = 24
 SUBTITLE_FONT_SIZE = 14

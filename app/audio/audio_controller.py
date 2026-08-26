@@ -2,15 +2,20 @@
 import time
 import threading
 from audio.audio_processor import AudioProcessor
-from modules.constants import *
+
+PARAMETER_UPDATE_INTERVAL = 0.5
+SMOOTHING_FACTOR = 0.2
+# lower factor here so volume feels snappier under hand movement
+VOLUME_SMOOTHING_FACTOR = 0.1
+BUFFER_SIZE = 5
 
 
 class AudioController:
-    def __init__(self, sample_rate=DEFAULT_SAMPLE_RATE):
-        self.audio_processor = AudioProcessor(sample_rate=sample_rate)
-        self.pitch = DEFAULT_PITCH
-        self.volume = DEFAULT_VOLUME
-        self.reverb = DEFAULT_REVERB
+    def __init__(self):
+        self.audio_processor = AudioProcessor()
+        self.pitch = 1.0
+        self.volume = 1.0
+        self.reverb = 0.0
         self.pitch_buffer = []
         self.volume_buffer = []
         self.reverb_buffer = []
@@ -37,7 +42,7 @@ class AudioController:
             self.audio_processor.set_param('volume', self.volume)
 
     def update_parameters(self):
-        # pitch and reverb require re-processing the whole audio so we throttle them
+        # pitch and reverb re-process the whole audio, so don't do it too often
         current_time = time.time()
         if current_time - self.last_update_time > PARAMETER_UPDATE_INTERVAL:
             with self.parameter_update_lock:
@@ -57,17 +62,14 @@ class AudioController:
         return {"pitch": self.pitch, "reverb": self.reverb, "volume": self.volume}
 
     def reset_parameters(self):
-        self.pitch = DEFAULT_PITCH
-        self.volume = DEFAULT_VOLUME
-        self.reverb = DEFAULT_REVERB
+        self.pitch = 1.0
+        self.volume = 1.0
+        self.reverb = 0.0
         self.pitch_buffer.clear()
         self.volume_buffer.clear()
         self.reverb_buffer.clear()
         if self.audio_loaded:
-            self.audio_processor.set_params({
-                'pitch': DEFAULT_PITCH, 'reverb': DEFAULT_REVERB,
-                'volume': DEFAULT_VOLUME
-            })
+            self.audio_processor.set_params({'pitch': 1.0, 'reverb': 0.0, 'volume': 1.0})
 
     def toggle_playback(self):
         if not self.audio_loaded:

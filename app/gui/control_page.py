@@ -3,7 +3,7 @@ import os
 import platform
 from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QWidget, QPushButton,
-    QHBoxLayout, QMessageBox, QApplication
+    QHBoxLayout, QMessageBox
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
@@ -15,11 +15,10 @@ class ControlPage(BasePage):
     def __init__(self, on_back_callback, overlay=None, audio_file_name=None):
         self.overlay = overlay
         self.audio_file_name = audio_file_name or "Unknown Song"
-        self._update_counter = 0
 
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_stats)
-        # macOS gui locks up if we poll too fast
+        # macOS chokes if we poll too fast
         update_interval = 300 if platform.system() == 'Darwin' else 100
         self.update_timer.start(update_interval)
 
@@ -161,10 +160,7 @@ class ControlPage(BasePage):
 
     def update_stats(self):
         self.stats_label.setText(self.generate_stats_text())
-        self._update_counter += 1
-        # button text updates are cheaper to skip, so only do it every 3rd tick
-        if self._update_counter % 3 == 0:
-            self.update_toggle_buttons()
+        self.update_toggle_buttons()
 
     def update_toggle_buttons(self):
         has_overlay = bool(self.overlay)
@@ -179,19 +175,15 @@ class ControlPage(BasePage):
     def toggle_control(self, name):
         if not self.overlay:
             return
-        # flush pending qt events so the button click doesn't feel laggy
-        QApplication.processEvents()
         self.overlay.toggle_control(name)
         self.update_toggle_buttons()
 
     def reset_audio_params(self):
         if self.overlay:
-            QApplication.processEvents()
             self.overlay.audio_controller.reset_parameters()
 
     def toggle_playback(self):
         if self.overlay:
-            QApplication.processEvents()
             self.overlay.audio_controller.toggle_playback()
 
     def quit_handdj(self):

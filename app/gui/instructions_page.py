@@ -13,27 +13,14 @@ class InstructionsPage(BasePage):
         scroll_area.setStyleSheet("QScrollArea { border: none; }")
 
         instructions_text = """
-        <h1>How to Use HandDJ</h1>
-
-        <h2>Getting Started</h2>
-        <p>1. Make sure your camera is connected and working</p>
-        <p>2. Position yourself so your hands are clearly visible to the camera</p>
-        <p>3. Keep good lighting for better hand detection</p>
-
         <h2>Hand Controls</h2>
-        <p><b>Pitch Control:</b> Move your left index/thumb finger up and down to change the pitch of your music</p>
-        <p><b>Volume Control:</b> Move hands apart/close to each other to change volume</p>
-        <p><b>Reverb Effects:</b> Move your right index/thumb finger up and down to change the reverb of your music</p>
+        <p><b>Pitch:</b> Left hand index/thumb up and down</p>
+        <p><b>Volume:</b> Move hands apart or together</p>
+        <p><b>Reverb:</b> Right hand index/thumb up and down</p>
 
-        <h2>Using the App</h2>
-        <p><b>Main Page:</b> Start here to access all features</p>
-        <p><b>Play Page:</b> Load YouTube link to play audio</p>
-        <p><b>Control Page:</b> Watch real-time statistics and access control buttons</p>
-
-        <h2>Tips for Best Results</h2>
-        <p>- Keep your hands steady for precise control</p>
-        <p>- Make clear, non-sudden movements</p>
-        <p>- If tracking stops working, check your camera and lighting</p>
+        <h2>Tips</h2>
+        <p>- Ensure your camera is connected and lighting is good</p>
+        <p>- Keep hands visible and make smooth movements</p>
         """
 
         label = QLabel(instructions_text)

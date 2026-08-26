@@ -8,16 +8,12 @@ import numpy as np
 from tracking.hand_tracker import HandTracker
 from audio.audio_controller import AudioController
 from tracking.visualizer import Visualizer
-from modules.constants import *
 
 
 class DJController:
     def __init__(self, audio_file="audio.wav"):
-        self.camera_width = DEFAULT_CAMERA_WIDTH
-        self.camera_height = DEFAULT_CAMERA_HEIGHT
-
-        self.visualizer = Visualizer(camera_width=self.camera_width, camera_height=self.camera_height)
-        self.audio_controller = AudioController(sample_rate=DEFAULT_SAMPLE_RATE)
+        self.visualizer = Visualizer()
+        self.audio_controller = AudioController()
 
         self.hand_tracker = None
         self.camera = None
@@ -30,21 +26,18 @@ class DJController:
 
         self.pending_audio_file = audio_file if audio_file and os.path.exists(audio_file) else None
 
-        # mediapipe and camera take a while to load, so do it in the background
+        # mediapipe + camera init is slow, don't block the UI
         self.init_thread = threading.Thread(target=self.initialize, daemon=True)
         self.init_thread.start()
 
     def initialize(self):
-        self.hand_tracker = HandTracker(
-            detection_confidence=DEFAULT_DETECTION_CONFIDENCE,
-            max_hands=DEFAULT_MAX_HANDS
-        )
+        self.hand_tracker = HandTracker(detection_confidence=0.7, max_hands=2)
 
         self.camera = cv2.VideoCapture(0)
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.camera.set(cv2.CAP_PROP_FPS, 30)
-        # buffer of 1 so we always get the latest frame, not a stale one
+        # only keep 1 frame buffered so we don't read stale frames
         self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
         if self.pending_audio_file:
@@ -52,16 +45,13 @@ class DJController:
 
         self.initialization_complete = True
 
-    def is_ready(self):
-        return self.initialization_complete and self.camera is not None and self.hand_tracker is not None
-
     def run(self):
         while True:
-            if not self.is_ready():
-                frame = np.zeros((self.camera_height, self.camera_width, 3), dtype=np.uint8)
+            if not self.initialization_complete or self.camera is None or self.hand_tracker is None:
+                frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 text_size = cv2.getTextSize("Loading HandDJ...", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-                text_x = (self.camera_width - text_size[0]) // 2
-                text_y = (self.camera_height - text_size[1]) // 2
+                text_x = (640 - text_size[0]) // 2
+                text_y = (480 - text_size[1]) // 2
                 cv2.putText(frame, "Loading HandDJ...", (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
                 cv2.imshow("HandDJ", frame)
                 cv2.waitKey(100)
@@ -89,7 +79,7 @@ class DJController:
         self.cleanup()
 
     def smooth_landmarks(self, current, previous, factor=0.3):
-        # blend with previous frame's landmarks so the hand doesn't jitter
+        # raw landmarks jitter a lot, blending with the previous frame smooths it out
         if previous is None:
             return current
         smoothed = []
@@ -111,7 +101,7 @@ class DJController:
                 pitch = self.visualizer.draw_pitch_control(frame, smoothed)
                 self.audio_controller.smooth_pitch(pitch)
         else:
-            # reset so smoothing starts fresh when the hand comes back
+            # clear so smoothing doesn't blend with a stale position when the hand returns
             self.previous_landmarks['left'] = None
 
         if self.hand_tracker.right_hand_present and self.hand_tracker.right_hand_landmarks:

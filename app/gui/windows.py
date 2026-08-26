@@ -14,7 +14,6 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("HandDJ")
         self.setGeometry(300, 100, 500, 600)
-        self.setWindowIcon(QIcon("HandDJ.png"))
         self.setStyleSheet(BACKGROUND_STYLE)
 
         self.page_stack = QStackedWidget()

@@ -2,14 +2,28 @@
 import cv2
 import math
 import numpy as np
-from modules.constants import *
+
+# these match mediapipe's landmark numbering
+THUMB_TIP = 4
+INDEX_TIP = 8
+
+# tuned by hand to feel natural — finger distance → audio param
+PITCH_DISTANCE_MIN = 30
+PITCH_DISTANCE_MAX = 150
+REVERB_DISTANCE_MIN = 30
+REVERB_DISTANCE_MAX = 150
+VOLUME_DISTANCE_MIN = 50
+VOLUME_DISTANCE_MAX = 300
+
+PITCH_RANGE_MIN = 0.5
+PITCH_RANGE_MAX = 2.0
+REVERB_RANGE_MIN = 0.0
+REVERB_RANGE_MAX = 2.0
+VOLUME_RANGE_MIN = 0.0
+VOLUME_RANGE_MAX = 2.0
 
 
 class Visualizer:
-    def __init__(self, camera_width=DEFAULT_CAMERA_WIDTH, camera_height=DEFAULT_CAMERA_HEIGHT):
-        self.camera_width = camera_width
-        self.camera_height = camera_height
-
     def draw_pitch_control(self, image, landmarks):
         thumb_x, thumb_y = landmarks[THUMB_TIP][1], landmarks[THUMB_TIP][2]
         index_x, index_y = landmarks[INDEX_TIP][1], landmarks[INDEX_TIP][2]
