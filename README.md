@@ -41,10 +41,12 @@ Each control can be toggled on/off from the control page.
 **Smoothing:** Hand inputs are buffered (last 5 readings) and averaged, then blended with the current value using a smoothing factor. Volume uses a lower smoothing factor (0.1 vs 0.2) so it feels more responsive to hand movement.
 
 ## Screenshots
-
+![hands](screenshots/hands.png)
+![controller](screenshots/controller.png)
 ![menu](screenshots/menu.png)
 ![instructions](screenshots/instructions.png)
 ![play](screenshots/play.png)
+
 
 ## License
 
