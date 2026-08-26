@@ -1,115 +1,51 @@
-<h1 align="center">
-  <br>
-  HandDJ
-  <br>
-</h1>
+# HandDJ
 
-<p align="center">
-  <img src="assets/demo.gif" alt="HandDJ Demo" width="600">
-</p>
+A gesture-controlled DJ app that uses your webcam and MediaPipe to manipulate audio with hand movements. Paste a YouTube link, and control pitch, volume, and reverb in real time.
 
-<h4 align="center">A gesture-controlled DJ application built using <a href="https://mediapipe.dev/" target="_blank">MediaPipe</a>.</h4>
+![demo](assets/demo.gif)
 
+## Setup
 
-
-<p align="center">
-  <a href="#key-features">Key Features</a> •
-  <a href="#how-to-use">How To Use</a> •
-  <a href="#controls">Controls</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#gallery">Gallery</a> •
-  <a href="#license">License</a>
-</p>
-
-## Key Features
-
-* Real-time Hand Tracking - Control music with hand gestures
-  - Uses MediaPipe for accurate hand detection and landmark tracking
-* Audio Effects Control
-  - Pitch manipulation with smooth transitions
-  - Volume control through hand positioning
-  - Reverb effects for enhanced sound quality
-* Audio Processing
-  - Real-time audio manipulation and effects
-  - Uses YouTube link to get audio
-  - Smooth parameter transitions to prevent audio artifacts
-* Cross Platform
-  - Works on Windows and macOS
-  - Optimized for different operating system requirements
-
-## How To Use
-
-To clone and run this application, you'll need [Git](https://git-scm.com) and [Python 3.10](https://python.org) installed on your computer. From your command line:
+Requires Python 3.10.
 
 ```bash
-# Clone this repository
+cd hand-dj
 
-# Go into the repository
-$ cd hand-dj
+# install dependencies
+pip install -r mac_requirements.txt   # macOS
+pip install -r win_requirements.txt   # Windows
 
-# Install dependencies (macOS)
-$ pip install -r mac_requirements.txt
-
-# Install dependencies (Windows)
-$ pip install -r win_requirements.txt
-
-# Go to app 
-$ cd app
-
-# Run the application
-$ python hand_dj.py
+# run
+cd app
+python hand_dj.py
 ```
 
-> **Note**
-> Make sure your camera is connected and accessible before running the application.
+Make sure your camera is connected before running.
 
 ## Controls
 
-HandDJ uses computer vision to track your hand movements and translate them into audio controls:
+- **Pitch** — left hand index/thumb up and down
+- **Volume** — move hands apart or together
+- **Reverb** — right hand index/thumb up and down
 
-* **Pitch Control** - Move your left index/thumb up and down to adjust the pitch of the audio
-* **Volume Control** - Mvoe your hands apart/close to adjust volume of the audio
-* **Reverb Effects** - Move your right index/thumb up and down to adjust the reverb of the audio
+Each control can be toggled on/off from the control page.
 
-Navigate through the application using the GUI:
-- **Main Page** - Start here to access all features
-- **Instructions Page** - Learn how to use hand controls
-- **Play Page** - Load YouTube link for audio
-- **Control Page** - Monitor real-time audio parameters and access control buttons
+## How It Works
 
-## Installation
+**Hand tracking** — MediaPipe detects up to 2 hands per frame via OpenCV. Landmark positions are smoothed between frames using exponential moving averages to reduce jitter from raw detection.
 
-### Prerequisites
+**Gesture mapping** — The distance between thumb tip and index finger tip (landmarks 4 and 8) on each hand is mapped to an audio parameter using linear interpolation. Left hand controls pitch, right hand controls reverb. Volume uses the distance between both hands' midpoints.
 
-- Python 3.10 (I use 3.10.11)
+**Audio processing** — Audio is downloaded from YouTube via yt-dlp. Effects (pitch shift, reverb, gain) are applied using Pedalboard, which processes raw PCM samples through a chain of VST-style effects. Pitch and reverb require a full re-render of the audio buffer, so parameter updates are throttled to every 500ms. Volume changes go straight to the mixer to stay responsive.
 
-### Dependencies
+**Smoothing** — Hand inputs are buffered (last 5 readings) and averaged, then blended with the current value using a smoothing factor. Volume uses a lower smoothing factor (0.1 vs 0.2) so it feels more responsive to hand movement.
 
-The application requires several Python packages for computer vision, audio processing, and GUI:
+## Screenshots
 
-- **MediaPipe** - AI/ML tools and techniques
-- **OpenCV** - Computer Vision Library
-- **PyQt5** - GUI library
-- **pygame/pydub/yt-dlp** - For real-time audio manipulation
-
-Use the provided requirements files for your operating system to ensure compatibility.
-
-## Gallery
-
-<p align="center">
-  <img src="assets/menu.png" alt="" width="300">
-  <img src="assets/instructions.png" alt="" width="300">
-  <img src="assets/play.png" alt="" width="300">
-</p>
-
-## Support
-
-If you encounter any issues or have questions about HandDJ, please open an issue on the GitHub repository.
+![menu](assets/menu.png)
+![instructions](assets/instructions.png)
+![play](assets/play.png)
 
 ## License
 
-MIT
-
----
-
-> Developed by Terrance Wong
+MIT — Terrance Wong
