@@ -16,7 +16,7 @@ pip install -r mac_requirements.txt   # macOS
 pip install -r win_requirements.txt   # Windows
 
 # run
-cd app
+cd src
 python hand_dj.py
 ```
 
@@ -42,9 +42,9 @@ Each control can be toggled on/off from the control page.
 
 ## Screenshots
 
-![menu](assets/menu.png)
-![instructions](assets/instructions.png)
-![play](assets/play.png)
+![menu](screenshots/menu.png)
+![instructions](screenshots/instructions.png)
+![play](screenshots/play.png)
 
 ## License
 
