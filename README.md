@@ -24,9 +24,9 @@ Make sure your camera is connected before running.
 
 ## Controls
 
-- **Pitch** — left hand index/thumb up and down
-- **Volume** — move hands apart or together
-- **Reverb** — right hand index/thumb up and down
+- **Pitch**: left hand index/thumb up and down
+- **Volume**: move hands apart or together
+- **Reverb**: right hand index/thumb up and down
 
 Each control can be toggled on/off from the control page.
 
