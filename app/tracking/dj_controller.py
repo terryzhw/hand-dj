@@ -5,252 +5,144 @@ import os
 import pygame
 import threading
 import numpy as np
-from typing import Optional
 from tracking.hand_tracker import HandTracker
 from audio.audio_controller import AudioController
 from tracking.visualizer import Visualizer
 from modules.constants import *
 
+
 class DJController:
-    def __init__(self, audio_file: str = "audio.wav"):
-        # Initialize the DJ controller with camera, audio, and hand tracking components
-        self.camera_width, self.camera_height = DEFAULT_CAMERA_WIDTH, DEFAULT_CAMERA_HEIGHT
-        
+    def __init__(self, audio_file="audio.wav"):
+        self.camera_width = DEFAULT_CAMERA_WIDTH
+        self.camera_height = DEFAULT_CAMERA_HEIGHT
 
         self.visualizer = Visualizer(camera_width=self.camera_width, camera_height=self.camera_height)
-
         self.audio_controller = AudioController(sample_rate=DEFAULT_SAMPLE_RATE)
-        
-        self.hand_tracker: Optional[HandTracker] = None
-        self.camera: Optional[cv2.VideoCapture] = None
+
+        self.hand_tracker = None
+        self.camera = None
         self.initialization_complete = False
-        self.initialization_thread: Optional[threading.Thread] = None
 
         self.previous_time = 0
-        self.frame_skip_count = 0
-        self.process_every_n_frames = 1
-        
-  
-        self.previous_landmarks = {
-            'left': None,
-            'right': None
-        }
-        
-        # Control enable/disable flags
-        self.controls_enabled = {
-            'pitch': True,
-            'reverb': True,
-            'volume': True,
-        }
+        self.previous_landmarks = {'left': None, 'right': None}
 
-        if audio_file and os.path.exists(audio_file):
-            self.pending_audio_file = audio_file
-        else:
-            self.pending_audio_file = None
-        
+        self.controls_enabled = {'pitch': True, 'reverb': True, 'volume': True}
 
-        self.start_async_initialization()
+        self.pending_audio_file = audio_file if audio_file and os.path.exists(audio_file) else None
 
-    def start_async_initialization(self):
+        # mediapipe and camera take a while to load, so do it in the background
+        self.init_thread = threading.Thread(target=self.initialize, daemon=True)
+        self.init_thread.start()
 
-        self.initialization_thread = threading.Thread(
-            target=self.initialize_heavy_components,
-            daemon=True
+    def initialize(self):
+        self.hand_tracker = HandTracker(
+            detection_confidence=DEFAULT_DETECTION_CONFIDENCE,
+            max_hands=DEFAULT_MAX_HANDS
         )
-        self.initialization_thread.start()
 
-    def initialize_heavy_components(self):
+        self.camera = cv2.VideoCapture(0)
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
+        self.camera.set(cv2.CAP_PROP_FPS, 30)
+        # buffer of 1 so we always get the latest frame, not a stale one
+        self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        try:
+        if self.pending_audio_file:
+            self.audio_controller.load_audio(self.pending_audio_file)
 
-            self.hand_tracker = HandTracker(
-                detection_confidence=DEFAULT_DETECTION_CONFIDENCE, 
-                max_hands=DEFAULT_MAX_HANDS
-            )
-            
+        self.initialization_complete = True
 
-            self.camera = cv2.VideoCapture(0)
-            if self.camera.isOpened():
- 
-                self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_width)
-                self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_height)
-                self.camera.set(cv2.CAP_PROP_FPS, 30)
-                self.camera.set(cv2.CAP_PROP_BUFFERSIZE, 1) 
-            
-
-            if self.pending_audio_file:
-                self.audio_controller.load_audio(self.pending_audio_file)
-                
-
-            self.initialization_complete = True
-            
-        except Exception as e:
-            print(f"Error during initialization: {e}")
-            self.initialization_complete = False
-
-    def is_ready(self) -> bool:
-   
+    def is_ready(self):
         return self.initialization_complete and self.camera is not None and self.hand_tracker is not None
 
     def run(self):
-        # Main control loop that processes camera frames and updates audio parameters
         while True:
             if not self.is_ready():
-   
-                loading_frame = self.create_loading_frame()
-                cv2.imshow("HandDJ", loading_frame)
-                time.sleep(0.1)
+                frame = np.zeros((self.camera_height, self.camera_width, 3), dtype=np.uint8)
+                text_size = cv2.getTextSize("Loading HandDJ...", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+                text_x = (self.camera_width - text_size[0]) // 2
+                text_y = (self.camera_height - text_size[1]) // 2
+                cv2.putText(frame, "Loading HandDJ...", (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.imshow("HandDJ", frame)
+                cv2.waitKey(100)
                 continue
-
 
             success, frame = self.camera.read()
             if not success:
                 time.sleep(0.1)
                 continue
 
-  
             frame = cv2.flip(frame, 1)
-            
             frame = self.hand_tracker.process_hands(frame)
-         
-            self.update_controls_with_smoothing(frame)
-            
+            self.update_controls(frame)
 
-            self.render_visuals(frame)
+            current_time = time.time()
+            if self.previous_time > 0:
+                fps = 1 / (current_time - self.previous_time)
+                cv2.putText(frame, f"FPS: {int(fps)}", (10, 470), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            self.previous_time = current_time
 
-   
             cv2.imshow("HandDJ", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
         self.cleanup()
 
-    def create_loading_frame(self):
+    def smooth_landmarks(self, current, previous, factor=0.3):
+        # blend with previous frame's landmarks so the hand doesn't jitter
+        if previous is None:
+            return current
+        smoothed = []
+        for curr, prev in zip(current, previous):
+            sx = int(prev[1] * (1 - factor) + curr[1] * factor)
+            sy = int(prev[2] * (1 - factor) + curr[2] * factor)
+            smoothed.append([curr[0], sx, sy])
+        return smoothed
 
-        frame = np.zeros((self.camera_height, self.camera_width, 3), dtype=np.uint8)
-        loading_text = "Loading HandDJ..."
-        progress_text = "Initializing camera and hand tracking..."
-        audio_text = "Music will start once fully loaded..."
-        
-
-        text_size = cv2.getTextSize(loading_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-        text_x = (self.camera_width - text_size[0]) // 2
-        text_y = (self.camera_height - text_size[1]) // 2
-        
-
-        cv2.putText(frame, loading_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-        cv2.putText(frame, progress_text, (50, text_y + 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 1)
-        cv2.putText(frame, audio_text, (50, text_y + 65), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 200, 100), 1)
-        
-        return frame
-
-    def smooth_landmarks(self, current_landmarks, previous_landmarks, smoothing_factor=0.3):
-        # Apply smoothing to hand landmarks to reduce jitter in gesture recognition
-        if previous_landmarks is None:
-            return current_landmarks
-        
-        smoothed_landmarks = []
-        for i, (current_landmark, prev_landmark) in enumerate(zip(current_landmarks, previous_landmarks)):
-
-            smooth_x = int(prev_landmark[1] * (1 - smoothing_factor) + current_landmark[1] * smoothing_factor)
-            smooth_y = int(prev_landmark[2] * (1 - smoothing_factor) + current_landmark[2] * smoothing_factor)
-            smoothed_landmarks.append([current_landmark[0], smooth_x, smooth_y])
-        
-        return smoothed_landmarks
-
-    def update_controls_with_smoothing(self, frame):
-        # Process hand gestures and update audio parameters with smoothing applied
+    def update_controls(self, frame):
         if self.hand_tracker.left_hand_present and self.hand_tracker.left_hand_landmarks:
-   
-            smoothed_left = self.smooth_landmarks(
+            smoothed = self.smooth_landmarks(
                 self.hand_tracker.left_hand_landmarks,
                 self.previous_landmarks['left']
             )
-            self.previous_landmarks['left'] = smoothed_left
-            
-          
-            if self.controls_enabled.get('pitch', True):
-                pitch = self.visualizer.draw_pitch_control(frame, smoothed_left)
+            self.previous_landmarks['left'] = smoothed
+
+            if self.controls_enabled['pitch']:
+                pitch = self.visualizer.draw_pitch_control(frame, smoothed)
                 self.audio_controller.smooth_pitch(pitch)
         else:
-   
+            # reset so smoothing starts fresh when the hand comes back
             self.previous_landmarks['left'] = None
-            
 
         if self.hand_tracker.right_hand_present and self.hand_tracker.right_hand_landmarks:
-  
-            smoothed_right = self.smooth_landmarks(
+            smoothed = self.smooth_landmarks(
                 self.hand_tracker.right_hand_landmarks,
                 self.previous_landmarks['right']
             )
-            self.previous_landmarks['right'] = smoothed_right
-            
+            self.previous_landmarks['right'] = smoothed
 
-            if self.controls_enabled.get('reverb', True):
-                reverb = self.visualizer.draw_reverb_control(frame, smoothed_right)
+            if self.controls_enabled['reverb']:
+                reverb = self.visualizer.draw_reverb_control(frame, smoothed)
                 self.audio_controller.smooth_reverb(reverb)
         else:
-  
             self.previous_landmarks['right'] = None
-            
 
-        if (self.hand_tracker.left_hand_present and self.hand_tracker.right_hand_present and
-            self.previous_landmarks['left'] and self.previous_landmarks['right']):
-    
-            if self.controls_enabled.get('volume', True):
+        if (self.hand_tracker.left_hand_present and self.hand_tracker.right_hand_present
+                and self.previous_landmarks['left'] and self.previous_landmarks['right']):
+            if self.controls_enabled['volume']:
                 volume = self.visualizer.draw_volume_control(
-                    frame, 
-                    self.previous_landmarks['left'], 
-                    self.previous_landmarks['right']
+                    frame, self.previous_landmarks['left'], self.previous_landmarks['right']
                 )
                 self.audio_controller.smooth_volume(volume)
-                # Duplicate call removed when control disabled; retain original behavior otherwise
-                volume = self.visualizer.draw_volume_control(
-                    frame, 
-                    self.previous_landmarks['left'], 
-                    self.previous_landmarks['right']
-                )
-                self.audio_controller.smooth_volume(volume)
-
-    def update_controls(self, frame):
-
-        if self.hand_tracker.left_hand_present and self.hand_tracker.left_hand_landmarks and self.controls_enabled.get('pitch', True):
-            pitch = self.visualizer.draw_pitch_control(frame, self.hand_tracker.left_hand_landmarks)
-            self.audio_controller.smooth_pitch(pitch)
-        if self.hand_tracker.right_hand_present and self.hand_tracker.right_hand_landmarks and self.controls_enabled.get('reverb', True):
-            reverb = self.visualizer.draw_reverb_control(frame, self.hand_tracker.right_hand_landmarks)
-            self.audio_controller.smooth_reverb(reverb)
-        if (self.hand_tracker.left_hand_present and self.hand_tracker.right_hand_present and
-            self.controls_enabled.get('volume', True)):
-            volume = self.visualizer.draw_volume_control(frame, self.hand_tracker.left_hand_landmarks, self.hand_tracker.right_hand_landmarks)
-            self.audio_controller.smooth_volume(volume)
-
-    def render_visuals(self, frame):
-
-        current_time = time.time()
-        self.visualizer.draw_fps(frame, self.previous_time, current_time)
-        self.previous_time = current_time
 
     def get_stats(self):
-   
         return self.audio_controller.get_stats()
 
-    # Control toggles for GUI
-    def toggle_control(self, name: str) -> bool:
+    def toggle_control(self, name):
         if name in self.controls_enabled:
             self.controls_enabled[name] = not self.controls_enabled[name]
-        return self.controls_enabled.get(name, False)
 
-    def toggle_pitch_enabled(self) -> bool:
-        return self.toggle_control('pitch')
-
-    def toggle_reverb_enabled(self) -> bool:
-        return self.toggle_control('reverb')
-
-    def toggle_volume_enabled(self) -> bool:
-        return self.toggle_control('volume')
-
-    def is_control_enabled(self, name: str) -> bool:
+    def is_control_enabled(self, name):
         return self.controls_enabled.get(name, False)
 
     def cleanup(self):

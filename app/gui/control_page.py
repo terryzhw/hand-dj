@@ -1,211 +1,69 @@
-# Control interface that displays real-time audio statistics and provides interactive controls
-# Shows pitch, volume, reverb values with enable/disable toggles and playback controls
-
+import sys
+import os
+import platform
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QLabel, QWidget, QPushButton, 
+    QVBoxLayout, QLabel, QWidget, QPushButton,
     QHBoxLayout, QMessageBox, QApplication
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
 from gui.base_page import BasePage
-from gui.styles import BUTTON_FONT_SIZE, BUTTON_STYLE, SUBTITLE_FONT_SIZE
+from gui.styles import BUTTON_FONT_SIZE, BUTTON_STYLE, SUBTITLE_FONT_SIZE, TITLE_FONT_SIZE
+
 
 class ControlPage(BasePage):
-
-    # Allows for real-time stats of pitch, bass, reverb and also buttons to control the program
- 
     def __init__(self, on_back_callback, overlay=None, audio_file_name=None):
-        # Store references to the overlay controller and audio file information
         self.overlay = overlay
-        # Track toggle buttons so we can update their state
-        self.pitch_toggle_button = None
-        self.reverb_toggle_button = None
-        self.volume_toggle_button = None
+        self.audio_file_name = audio_file_name or "Unknown Song"
+        self._update_counter = 0
 
-        # Get song name
-        if audio_file_name:
-            self.audio_file_name = audio_file_name
-        else:
-            self.audio_file_name = "Unknown Song"
-        
         self.update_timer = QTimer()
         self.update_timer.timeout.connect(self.update_stats)
-        # Reduce update frequency on macOS to prevent GUI blocking
-        import platform
+        # macOS gui locks up if we poll too fast
         update_interval = 300 if platform.system() == 'Darwin' else 100
         self.update_timer.start(update_interval)
-        super().__init__(on_back_callback, "Controller")
 
-    # Helper to attach controller after page creation
-    def set_overlay(self, overlay):
-        self.overlay = overlay
-        self.update_toggle_buttons()
+        super().__init__(on_back_callback, "Controller")
 
     def create_base_page(self):
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(20, 20, 20, 20)
         self.main_layout.setSpacing(20)
 
-        title = self.create_title_label()
+        title = QLabel(self.page_title)
+        title.setFont(QFont("Arial", TITLE_FONT_SIZE, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
         self.main_layout.addWidget(title)
         self.main_layout.addStretch()
         self.setup_content(self.main_layout)
-
         self.main_layout.addStretch()
 
         self.setLayout(self.main_layout)
 
     def setup_content(self, layout):
-        # Layout of the page
-        song_info = self.create_song_info_widget()
-        stats = self.create_stats_widget()
-        controls = self.create_controls_widget()
-        
-        layout.insertWidget(1, song_info)
-        layout.insertWidget(2, stats)
-        layout.insertWidget(3, controls)
-
-    def create_stats_widget(self):
-        # Create container for stats display
-        widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(15)
-
-        self.stats_label = self.create_stats_label()
-        layout.addWidget(self.stats_label)
-
-        widget.setLayout(layout)
-        return widget
-
-    def create_stats_label(self):
-        stats_text = self.generate_stats_text()
-        stats_label = QLabel(stats_text)
-        stats_label.setFont(QFont("Arial", 12))
-        stats_label.setWordWrap(True)
-        stats_label.setStyleSheet("color: white; padding: 10px;")
-        return stats_label
-
-    def generate_stats_text(self):
-        # Generate HTML-formatted statistics text based on overlay state
-        if self.overlay and hasattr(self.overlay, 'get_stats'):
-            try:
-                # Get real-time statistics 
-                stats = self.overlay.get_stats()
-                return self.format_live_stats(stats)
-            except Exception as e:
-                return f"<h2>Error Getting Stats</h2><p>Error: {str(e)}</p>"
-        else:
-            # Display waiting message when no audio is loaded
-            return """
-            <h2>Waiting for Audio...</h2>
-            <p style='color: #90CAF9; text-align: center; font-style: italic;'>
-                Please start playing a song to see real-time statistics.
-            </p>
-            <p style='color: #757575; text-align: center; font-size: 12px;'>
-                Go to Play page → Enter YouTube URL → Run HandDJ
-            </p>
-            """
-
-    def is_control_enabled(self, name: str) -> bool:
-        if self.overlay and hasattr(self.overlay, 'is_control_enabled'):
-            try:
-                return self.overlay.is_control_enabled(name)
-            except Exception:
-                return True
-        return False
-
-    def format_live_stats(self, stats):
-        # Extract and format numerical values for display
-        pitch_val = f"{stats['pitch']:.2f}"
-        reverb_val = f"{stats['reverb']:.2f}"
-        volume_val = f"{stats['volume']:.2f}"
-        volume_percent = f"{stats['volume'] * 100:.0f}%"
-        
-        playback_info = self.get_playback_info()
-
-        pitch_on = self.is_control_enabled('pitch')
-        reverb_on = self.is_control_enabled('reverb')
-        volume_on = self.is_control_enabled('volume')
-        off_tag = "<span style='color:#9e9e9e;'> (Disabled)</span>"
-        
-        return f"""
-        <h2>Audio Statistics</h2>
-        <table style="width: 100%; color: white; border-spacing: 10px;">
-            {playback_info}
-            <tr>
-                <td style="width: 50%;"><b>Pitch:</b></td>
-                <td style="color: #4CAF50;">{pitch_val}x{' ' + off_tag if not pitch_on else ''}</td>
-            </tr>
-            <tr>
-                <td><b>Volume:</b></td>
-                <td style="color: #2196F3;">{volume_val} ({volume_percent}){' ' + off_tag if not volume_on else ''}</td>
-            </tr>
-            <tr>
-                <td><b>Reverb:</b></td>
-                <td style="color: #FF9800;">{reverb_val}{' ' + off_tag if not reverb_on else ''}</td>
-            </tr>
-        </table>
-    
-        """
-
-    def get_playback_info(self):
-        # Get current playback status information for display
-        if hasattr(self.overlay, 'audio_controller'):
-            if hasattr(self.overlay.audio_controller, 'audio_loaded') and self.overlay.audio_controller.audio_loaded:
-                is_playing = getattr(self.overlay.audio_controller.audio_processor, 'is_playing', False)
-                status = "Playing" if is_playing else "Paused"
-                color = "#4CAF50" if is_playing else "#FF5722"  
-                return f"""
-            <tr>
-                <td><b>Status:</b></td>
-                <td style="color: {color};">{status}</td>
-            </tr>"""
-        return """
-            <tr>
-                <td><b>Status:</b></td>
-                <td style="color: #757575;">No Audio Loaded</td>
-            </tr>"""
-
-    def create_song_info_widget(self):
-        # Create widget to display current song information
-        widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(10)
-        
-        # Create and style the song title label with music note icon
         self.song_title_label = QLabel(f"♪ {self.audio_file_name}")
         self.song_title_label.setFont(QFont("Arial", SUBTITLE_FONT_SIZE, QFont.Bold))
         self.song_title_label.setAlignment(Qt.AlignCenter)
         self.song_title_label.setStyleSheet("color: #4CAF50; padding: 5px;")
-        
-        layout.addWidget(self.song_title_label)
-        
-        widget.setLayout(layout)
-        return widget
 
-    def create_controls_widget(self):
-        # Create widget containing control buttons for audio manipulation
-        widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(15)
-        
-        # Create horizontal layout for buttons
+        self.stats_label = QLabel(self.generate_stats_text())
+        self.stats_label.setFont(QFont("Arial", 12))
+        self.stats_label.setWordWrap(True)
+        self.stats_label.setStyleSheet("color: white; padding: 10px;")
+
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
-        
-        # Create Reset button to restore default audio parameters
+
         self.reset_button = QPushButton("Reset")
         self.reset_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.reset_button.setStyleSheet(BUTTON_STYLE)
         self.reset_button.clicked.connect(self.reset_audio_params)
-        
-        # Create Play/Pause toggle button
+
         self.toggle_button = QPushButton("Play/Pause")
         self.toggle_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.toggle_button.setStyleSheet(BUTTON_STYLE)
         self.toggle_button.clicked.connect(self.toggle_playback)
-        
-        # Create Quit button with red styling for emphasis
+
         self.quit_button = QPushButton("Quit")
         self.quit_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.quit_button.setStyleSheet("""
@@ -217,173 +75,141 @@ class ControlPage(BasePage):
                 padding: 10px 20px;
                 font-weight: bold;
             }
-            QPushButton:hover {
-                background-color: #f44336;
-            }
-            QPushButton:pressed {
-                background-color: #b71c1c;
-            }
+            QPushButton:hover { background-color: #f44336; }
+            QPushButton:pressed { background-color: #b71c1c; }
         """)
         self.quit_button.clicked.connect(self.quit_handdj)
-        
-        # Add all buttons to the horizontal layout
+
         buttons_layout.addWidget(self.reset_button)
         buttons_layout.addWidget(self.toggle_button)
         buttons_layout.addWidget(self.quit_button)
 
-        # Add buttons layout to main layout
-        layout.addLayout(buttons_layout)
-
-        # Add enable/disable control buttons
         toggles_layout = QHBoxLayout()
         toggles_layout.setSpacing(10)
 
         self.pitch_toggle_button = QPushButton("Pitch: On")
         self.pitch_toggle_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.pitch_toggle_button.setStyleSheet(BUTTON_STYLE)
-        self.pitch_toggle_button.clicked.connect(self.toggle_pitch_control)
+        self.pitch_toggle_button.clicked.connect(lambda: self.toggle_control('pitch'))
 
         self.volume_toggle_button = QPushButton("Volume: On")
         self.volume_toggle_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.volume_toggle_button.setStyleSheet(BUTTON_STYLE)
-        self.volume_toggle_button.clicked.connect(self.toggle_volume_control)
+        self.volume_toggle_button.clicked.connect(lambda: self.toggle_control('volume'))
 
         self.reverb_toggle_button = QPushButton("Reverb: On")
         self.reverb_toggle_button.setFont(QFont("Arial", BUTTON_FONT_SIZE))
         self.reverb_toggle_button.setStyleSheet(BUTTON_STYLE)
-        self.reverb_toggle_button.clicked.connect(self.toggle_reverb_control)
+        self.reverb_toggle_button.clicked.connect(lambda: self.toggle_control('reverb'))
 
         toggles_layout.addWidget(self.pitch_toggle_button)
         toggles_layout.addWidget(self.volume_toggle_button)
         toggles_layout.addWidget(self.reverb_toggle_button)
 
-        layout.addLayout(toggles_layout)
-        
-        widget.setLayout(layout)
+        layout.insertWidget(1, self.song_title_label)
+        layout.insertWidget(2, self.stats_label)
 
-        # Initialize buttons according to overlay state
-        self.update_toggle_buttons()
-        return widget
+        controls_widget = QWidget()
+        controls_layout = QVBoxLayout()
+        controls_layout.setSpacing(15)
+        controls_layout.addLayout(buttons_layout)
+        controls_layout.addLayout(toggles_layout)
+        controls_widget.setLayout(controls_layout)
+        layout.insertWidget(3, controls_widget)
 
-    def update_toggle_buttons(self):
-        # Update button text and enabled state based on overlay/control states
-        has_overlay = bool(self.overlay)
-        for btn in [self.pitch_toggle_button, self.volume_toggle_button, self.reverb_toggle_button]:
-            if btn:
-                btn.setEnabled(has_overlay)
-        if not has_overlay:
-            return
-        try:
-            pitch_on = self.is_control_enabled('pitch')
-            volume_on = self.is_control_enabled('volume')
-            reverb_on = self.is_control_enabled('reverb')
-            if self.pitch_toggle_button:
-                self.pitch_toggle_button.setText(f"Pitch: {'On' if pitch_on else 'Off'}")
-            if self.volume_toggle_button:
-                self.volume_toggle_button.setText(f"Volume: {'On' if volume_on else 'Off'}")
-            if self.reverb_toggle_button:
-                self.reverb_toggle_button.setText(f"Reverb: {'On' if reverb_on else 'Off'}")
-        except Exception:
-            pass
-        
+    def generate_stats_text(self):
+        if not self.overlay:
+            return """
+            <h2>Waiting for Audio...</h2>
+            <p style='color: #90CAF9; text-align: center; font-style: italic;'>
+                Please start playing a song to see real-time statistics.
+            </p>
+            """
+
+        stats = self.overlay.get_stats()
+        off_tag = "<span style='color:#9e9e9e;'> (Disabled)</span>"
+
+        is_playing = self.overlay.audio_controller.audio_processor.is_playing
+        status = "Playing" if is_playing else "Paused"
+        status_color = "#4CAF50" if is_playing else "#FF5722"
+
+        pitch_on = self.overlay.is_control_enabled('pitch')
+        reverb_on = self.overlay.is_control_enabled('reverb')
+        volume_on = self.overlay.is_control_enabled('volume')
+
+        return f"""
+        <h2>Audio Statistics</h2>
+        <table style="width: 100%; color: white; border-spacing: 10px;">
+            <tr>
+                <td><b>Status:</b></td>
+                <td style="color: {status_color};">{status}</td>
+            </tr>
+            <tr>
+                <td style="width: 50%;"><b>Pitch:</b></td>
+                <td style="color: #4CAF50;">{stats['pitch']:.2f}x{'' if pitch_on else off_tag}</td>
+            </tr>
+            <tr>
+                <td><b>Volume:</b></td>
+                <td style="color: #2196F3;">{stats['volume']:.2f} ({stats['volume'] * 100:.0f}%){'' if volume_on else off_tag}</td>
+            </tr>
+            <tr>
+                <td><b>Reverb:</b></td>
+                <td style="color: #FF9800;">{stats['reverb']:.2f}{'' if reverb_on else off_tag}</td>
+            </tr>
+        </table>
+        """
+
     def update_stats(self):
-        # Update statistics display in real-time
-        if hasattr(self, 'stats_label'):
-            stats_text = self.generate_stats_text()
-            self.stats_label.setText(stats_text)
-        # Less frequent update to prevent GUI blocking
-        if hasattr(self, '_update_counter'):
-            self._update_counter += 1
-        else:
-            self._update_counter = 0
-        # Only update buttons every 3rd timer cycle to reduce Qt event loop pressure
+        self.stats_label.setText(self.generate_stats_text())
+        self._update_counter += 1
+        # button text updates are cheaper to skip, so only do it every 3rd tick
         if self._update_counter % 3 == 0:
             self.update_toggle_buttons()
 
-    def toggle_pitch_control(self):
-        if not self.overlay or not hasattr(self.overlay, 'toggle_pitch_enabled'):
+    def update_toggle_buttons(self):
+        has_overlay = bool(self.overlay)
+        for btn in [self.pitch_toggle_button, self.volume_toggle_button, self.reverb_toggle_button]:
+            btn.setEnabled(has_overlay)
+        if not has_overlay:
             return
-        try:
-            # Force process pending events to ensure GUI responsiveness
-            QApplication.processEvents()
-            self.overlay.toggle_pitch_enabled()
-        finally:
-            self.update_toggle_buttons()
+        self.pitch_toggle_button.setText(f"Pitch: {'On' if self.overlay.is_control_enabled('pitch') else 'Off'}")
+        self.volume_toggle_button.setText(f"Volume: {'On' if self.overlay.is_control_enabled('volume') else 'Off'}")
+        self.reverb_toggle_button.setText(f"Reverb: {'On' if self.overlay.is_control_enabled('reverb') else 'Off'}")
 
-    def toggle_reverb_control(self):
-        if not self.overlay or not hasattr(self.overlay, 'toggle_reverb_enabled'):
+    def toggle_control(self, name):
+        if not self.overlay:
             return
-        try:
-            QApplication.processEvents()
-            self.overlay.toggle_reverb_enabled()
-        finally:
-            self.update_toggle_buttons()
-
-    def toggle_volume_control(self):
-        if not self.overlay or not hasattr(self.overlay, 'toggle_volume_enabled'):
-            return
-        try:
-            QApplication.processEvents()
-            self.overlay.toggle_volume_enabled()
-        finally:
-            self.update_toggle_buttons()
-
+        # flush pending qt events so the button click doesn't feel laggy
+        QApplication.processEvents()
+        self.overlay.toggle_control(name)
+        self.update_toggle_buttons()
 
     def reset_audio_params(self):
-        # Reset audio parameters to default values
-        try:
+        if self.overlay:
             QApplication.processEvents()
-            if self.overlay and hasattr(self.overlay, 'audio_controller'):
-                self.overlay.audio_controller.reset_parameters()
-                QMessageBox.information(self, "Reset", "Audio parameters reset to default values!")
-            else:
-                QMessageBox.warning(self, "Reset", "No audio controller available. Please start playing audio first.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to reset parameters: {str(e)}")
+            self.overlay.audio_controller.reset_parameters()
 
     def toggle_playback(self):
-        # Toggle between play and pause states for audio playback
-        try:
+        if self.overlay:
             QApplication.processEvents()
-            if self.overlay and hasattr(self.overlay, 'audio_controller'):
-                self.overlay.audio_controller.toggle_playback()
-            else:
-                QMessageBox.warning(self, "Playback", "No audio controller available. Please start playing audio first.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to toggle playback: {str(e)}")
+            self.overlay.audio_controller.toggle_playback()
 
     def quit_handdj(self):
-        # Quit the HandDJ application with confirmation dialog
         reply = QMessageBox.question(
-            self, 
-            "Quit", 
-            "Are you sure you want to quit",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            self, "Quit", "Are you sure you want to quit",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
-            # Clean up overlay resources if available
-            try:
-                if self.overlay and hasattr(self.overlay, 'cleanup'):
-                    self.overlay.cleanup()
-            except Exception:
-                pass  
-            
-            # Remove temporary audio file
-            try:
-                import os
-                temp_audio_file = "youtube_audio.wav"
-                if os.path.exists(temp_audio_file):
-                    os.remove(temp_audio_file)
-            except Exception:
-                pass  #
-            
-            import sys
+            if self.overlay:
+                self.overlay.cleanup()
+
+            temp_audio_file = "youtube_audio.wav"
+            if os.path.exists(temp_audio_file):
+                os.remove(temp_audio_file)
+
             sys.exit(0)
 
     def closeEvent(self, event):
-        # Clean up resources when the window is closed
-        if hasattr(self, 'update_timer'):
-            self.update_timer.stop()
+        self.update_timer.stop()
         super().closeEvent(event)
