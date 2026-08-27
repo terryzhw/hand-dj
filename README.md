@@ -1,6 +1,6 @@
 # HandDJ
 
-A gesture-controlled DJ app that uses your webcam and MediaPipe to manipulate audio with hand movements. Paste a YouTube link, and control pitch, volume, and reverb in real time.
+A gesture-controlled DJ app that uses your webcam and MediaPipe to manipulate audio with hand movements. Paste any YouTube link, and control pitch, volume, and reverb in real time.
 
 ![demo](assets/demo.gif)
 
